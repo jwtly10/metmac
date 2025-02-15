@@ -10,9 +10,12 @@ pub fn handle_keyboard_event(event: &Event) -> Option<KeyEvent> {
             debug!("Raw Event: {:?}", event);
             let key_name = parse_name_from_event(event);
 
-            // TODO: Impl application focus tracking
-            let key_event =
-                KeyEvent::new(key_name, "TBI".to_string(), Utc::now().timestamp_millis());
+            // TODO: Impl window_title focus tracking
+            let key_event = KeyEvent::new(
+                key_name,
+                "not_implemented_yet".to_string(),
+                Utc::now().timestamp_millis(),
+            );
 
             info!("Key Event: {:?}", key_event);
             Some(key_event)

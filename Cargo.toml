@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.95"
 chrono = "0.4.39"
+directories = "6.0.0"
 env_logger = "0.11.6"
 log = "0.4.25"
 rdev = "0.5.3"
+rusqlite = "0.33.0"
+tempfile = "3.16.0"
