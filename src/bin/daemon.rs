@@ -1,10 +1,9 @@
-mod input;
-mod models;
-mod storage;
+use metmac::input::keyboard::handle_keyboard_event;
+use metmac::storage::{buffer::KeyEventBuffer, connection::Database};
 
 use anyhow::{Error, Result};
-
 use env_logger::init;
+
 use rdev::{listen, Event};
 use std::{
     cell::RefCell,
@@ -13,9 +12,6 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use storage::{buffer::KeyEventBuffer, connection::Database};
-
-use crate::input::keyboard::handle_keyboard_event;
 
 use log::info;
 
