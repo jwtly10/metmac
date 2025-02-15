@@ -20,3 +20,10 @@ sqlx = { version = "0.8.3", features = ["runtime-tokio",
 tempfile = "3.16.0"
 tokio = { version = "1.43.0", features = ["full"] }
 serde = { version = "1.0.217", features = ["derive"] }
+objc2-app-kit = "0.3.0"
+objc2 = "0.6.0"
+core-foundation = "0.10.0"
+core-graphics = "0.24.0"
+core-foundation-sys = "0.8.7"
+objc2-foundation = "0.3.0"
+

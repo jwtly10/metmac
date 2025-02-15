@@ -2,7 +2,7 @@ use chrono::Utc;
 use log::{debug, info, warn};
 use rdev::{Event, EventType, Key};
 
-use crate::models::events::KeyEvent;
+use crate::{models::events::KeyEvent, system::windows};
 
 pub fn handle_keyboard_event(event: &Event) -> Option<KeyEvent> {
     match &event.event_type {
@@ -10,10 +10,20 @@ pub fn handle_keyboard_event(event: &Event) -> Option<KeyEvent> {
             debug!("Raw Event: {:?}", event);
             let key_name = parse_name_from_event(event);
 
-            // TODO: Impl window_title focus tracking
+            //let application_name: String = match windows::get_focused_window() {
+            //    Some(name) => name,
+            //    None => {
+            //        warn!("Could not get the focused window");
+            //        "unknown".to_string()
+            //    }
+            //};
+
+            //let key_event =
+            //    KeyEvent::new(key_name, application_name, Utc::now().timestamp_millis());
+
             let key_event = KeyEvent::new(
                 key_name,
-                "not_implemented_yet".to_string(),
+                "unknown".to_string(),
                 Utc::now().timestamp_millis(),
             );
 
@@ -211,41 +221,5 @@ fn alt_key_name(is_left: bool) -> String {
         "opt_left".to_string()
     } else {
         "opt_right".to_string()
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn meta_key_name(is_left: bool) -> String {
-    if is_left {
-        "windows_left".to_string()
-    } else {
-        "windows_right".to_string()
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn alt_key_name(is_left: bool) -> String {
-    if is_left {
-        "alt_left".to_string()
-    } else {
-        "alt_right".to_string()
-    }
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn meta_key_name(is_left: bool) -> String {
-    if is_left {
-        "meta_left".to_string()
-    } else {
-        "meta_right".to_string()
-    }
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn alt_key_name(is_left: bool) -> String {
-    if is_left {
-        "alt_left".to_string()
-    } else {
-        "alt_right".to_string()
     }
 }
