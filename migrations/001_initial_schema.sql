@@ -1,3 +1,4 @@
+-- 001_initial_schema.sql
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_timestamp INTEGER NOT NULL,

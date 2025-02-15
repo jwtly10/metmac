@@ -1,6 +1,5 @@
 use anyhow::Result;
 use log::{debug, warn};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::models::events::KeyEvent;
@@ -13,11 +12,11 @@ pub struct KeyEventBuffer {
     flush_threshold: usize,
     flush_interval: Duration,
 
-    db: Arc<Mutex<Database>>,
+    db: Database,
 }
 
 impl KeyEventBuffer {
-    pub fn new(db: Arc<Mutex<Database>>, flush_threshold: usize, flush_interval: Duration) -> Self {
+    pub fn new(db: Database, flush_threshold: usize, flush_interval: Duration) -> Self {
         Self {
             events: Vec::with_capacity(flush_threshold),
             last_flush: Instant::now(),
@@ -27,7 +26,7 @@ impl KeyEventBuffer {
         }
     }
 
-    pub fn push(&mut self, key: KeyEvent) -> Result<()> {
+    pub async fn push(&mut self, key: KeyEvent) -> Result<()> {
         self.events.push(key);
 
         if self.should_flush() {
@@ -35,7 +34,7 @@ impl KeyEventBuffer {
                 "Buffer threshold reached, flushing {} events",
                 self.events.len()
             );
-            self.flush()?;
+            self.flush().await?;
         }
         Ok(())
     }
@@ -45,7 +44,7 @@ impl KeyEventBuffer {
             || self.last_flush.elapsed() >= self.flush_interval
     }
 
-    pub fn flush(&mut self) -> Result<()> {
+    pub async fn flush(&mut self) -> Result<()> {
         if self.events.is_empty() {
             return Ok(());
         }
@@ -53,22 +52,14 @@ impl KeyEventBuffer {
         let batch = std::mem::take(&mut self.events);
         let batch_len = batch.len();
 
-        match self.db.lock() {
-            Ok(mut db) => {
-                if let Err(e) = db.insert_events(&batch) {
-                    warn!("failed to flush {} events to database: {}", batch_len, e);
-                    self.events = batch;
-                    return Err(e);
-                }
-
-                self.last_flush = Instant::now();
-                Ok(())
-            }
-            Err(e) => {
-                self.events = batch;
-                Err(anyhow::anyhow!("Failed to lock database mutex: {}", e))
-            }
+        if let Err(e) = self.db.insert_events(&batch).await {
+            warn!("failed to flush {} events to database: {}", batch_len, e);
+            self.events = batch;
+            return Err(e);
         }
+
+        self.last_flush = Instant::now();
+        Ok(())
     }
 }
 
@@ -80,55 +71,43 @@ mod tests {
     use chrono::Utc;
     use tempfile::NamedTempFile;
 
-    #[test]
-    fn test_buffer_flush_by_threshold() -> Result<()> {
+    #[tokio::test]
+    async fn test_buffer_flush_by_threshold() -> Result<()> {
         // Setup database
         let tmp_db = NamedTempFile::new()?;
         let tmp_db_path = PathBuf::from(tmp_db.path());
-        let mut db = Database::new(tmp_db_path)?;
-        db.run_migrations()?;
-        let db_arc = Arc::new(Mutex::new(db));
+        let mut db = Database::new(tmp_db_path).await?;
+        db.run_migrations().await?;
 
         let flush_threshold = 5;
         let flush_interval = 60; // Long enough to not trigger by time
 
         let mut buffer =
-            KeyEventBuffer::new(db_arc, flush_threshold, Duration::from_secs(flush_interval));
+            KeyEventBuffer::new(db, flush_threshold, Duration::from_secs(flush_interval));
 
         for i in 0..5 {
-            match buffer.push(KeyEvent::new(
-                format!("key{}", i),
-                format!("title{}", i),
-                Utc::now().timestamp(),
-            )) {
-                Ok(_) => {}
-                Err(e) => {
-                    panic!("Failed to push event to buffer: {}", e);
-                }
-            }
-        } // This should trigger flush by threshold
+            buffer
+                .push(KeyEvent {
+                    timestamp: Utc::now().timestamp(),
+                    key_name: format!("key{}", i),
+                    window_title: format!("title{}", i),
+                })
+                .await?;
+        }
 
-        let mut db = buffer.db.lock().unwrap();
-        let events = match db.get_events() {
-            Ok(events) => events,
-            Err(e) => {
-                panic!("Failed to get events from database: {}", e);
-            }
-        };
-
+        let events = buffer.db.get_events().await?;
         assert_eq!(events.len(), 5);
 
         Ok(())
     }
 
-    #[test]
-    fn test_buffer_flush_by_interval() -> Result<()> {
+    #[tokio::test]
+    async fn test_buffer_flush_by_interval() -> Result<()> {
         // Setup database
         let tmp_db = NamedTempFile::new()?;
         let tmp_db_path = PathBuf::from(tmp_db.path());
-        let mut db = Database::new(tmp_db_path)?;
-        db.run_migrations()?;
-        let db_arc = Arc::new(Mutex::new(db));
+        let mut db = Database::new(tmp_db_path).await?;
+        db.run_migrations().await?;
 
         let flush_threshold = 10; // Large enough to not trigger by threshold
 
@@ -137,43 +116,30 @@ mod tests {
         let flush_interval = 1;
 
         let mut buffer =
-            KeyEventBuffer::new(db_arc, flush_threshold, Duration::from_secs(flush_interval));
+            KeyEventBuffer::new(db, flush_threshold, Duration::from_secs(flush_interval));
 
         for i in 0..5 {
-            match buffer.push(KeyEvent::new(
-                format!("key{}", i),
-                format!("title{}", i),
-                Utc::now().timestamp(),
-            )) {
-                Ok(_) => {}
-                Err(e) => {
-                    panic!("Failed to push event to buffer: {}", e);
-                }
-            }
+            buffer
+                .push(KeyEvent {
+                    timestamp: Utc::now().timestamp(),
+                    key_name: format!("key{}", i),
+                    window_title: format!("title{}", i),
+                })
+                .await?;
         }
 
         // Sleep and then trigger a new keypress to trigger flush by interval
-        std::thread::sleep(Duration::from_secs(flush_interval + 1));
+        tokio::time::sleep(Duration::from_secs(flush_interval + 1)).await;
 
-        match buffer.push(KeyEvent::new(
-            "key6".to_string(),
-            "title6".to_string(),
-            Utc::now().timestamp(),
-        )) {
-            Ok(_) => {}
-            Err(e) => {
-                panic!("Failed to push event to buffer: {}", e);
-            }
-        }
+        buffer
+            .push(KeyEvent::new(
+                "key6".to_string(),
+                "title6".to_string(),
+                Utc::now().timestamp(),
+            ))
+            .await?;
 
-        let mut db = buffer.db.lock().unwrap();
-        let events = match db.get_events() {
-            Ok(events) => events,
-            Err(e) => {
-                panic!("Failed to get events from database: {}", e);
-            }
-        };
-
+        let events = buffer.db.get_events().await?;
         assert_eq!(events.len(), 6);
 
         Ok(())
