@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use chrono::Utc;
 use directories::BaseDirs;
 use log::{debug, info};
 
@@ -9,7 +8,6 @@ use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct Database {
@@ -120,13 +118,14 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use tempfile::NamedTempFile;
 
     #[tokio::test]
     async fn test_database_new() -> Result<()> {
         let tmp_dir = NamedTempFile::new()?;
         let tmp_db_path = PathBuf::from(tmp_dir.path());
-        let mut db = Database::new(tmp_db_path.clone()).await?;
+        let db = Database::new(tmp_db_path.clone()).await?;
         db.run_migrations().await?;
 
         // Test that the database file was created
@@ -139,7 +138,7 @@ mod tests {
     async fn test_database_insert_events() -> Result<()> {
         let tmp_dir = NamedTempFile::new()?;
         let tmp_db_path = PathBuf::from(tmp_dir.path());
-        let mut db = Database::new(tmp_db_path.clone()).await?;
+        let db = Database::new(tmp_db_path.clone()).await?;
         db.run_migrations().await?;
 
         let events = vec![

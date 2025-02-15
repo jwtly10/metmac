@@ -76,7 +76,7 @@ mod tests {
         // Setup database
         let tmp_db = NamedTempFile::new()?;
         let tmp_db_path = PathBuf::from(tmp_db.path());
-        let mut db = Database::new(tmp_db_path).await?;
+        let db = Database::new(tmp_db_path).await?;
         db.run_migrations().await?;
 
         let flush_threshold = 5;
@@ -106,7 +106,7 @@ mod tests {
         // Setup database
         let tmp_db = NamedTempFile::new()?;
         let tmp_db_path = PathBuf::from(tmp_db.path());
-        let mut db = Database::new(tmp_db_path).await?;
+        let db = Database::new(tmp_db_path).await?;
         db.run_migrations().await?;
 
         let flush_threshold = 10; // Large enough to not trigger by threshold

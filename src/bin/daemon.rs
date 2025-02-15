@@ -1,58 +1,52 @@
 use metmac::input::keyboard::handle_keyboard_event;
 use metmac::storage::{buffer::KeyEventBuffer, connection::Database};
 
-use anyhow::{Error, Result};
+use anyhow::Result;
 use env_logger::init;
 
-use rdev::{listen, Event};
-use std::{
-    cell::RefCell,
-    path::PathBuf,
-    rc::Rc,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
-
 use log::info;
+use rdev::{listen, Event};
+use std::sync::Arc;
+use std::{path::PathBuf, time::Duration};
+use tokio::sync::Mutex;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     init(); // Init env logger
 
     // TODO: Have some configuration logic, for path and flush
     let db_path = PathBuf::from("~/.metmac/data.db");
-    let mut db = Database::new(db_path)?;
-    db.run_migrations()?;
+    let db = Database::new(db_path).await?;
+    db.run_migrations().await?;
 
     let flush_threshold = 30; // events
     let flush_interval = 3; // seconds
 
-    let db_arc = Arc::new(Mutex::new(db));
+    let buffer = KeyEventBuffer::new(db, flush_threshold, Duration::from_secs(flush_interval));
 
-    let buffer = KeyEventBuffer::new(db_arc, flush_threshold, Duration::from_secs(flush_interval));
-
-    let buffer_rc = Rc::new(RefCell::new(buffer));
+    let buffer_arc = Arc::new(Mutex::new(buffer));
 
     info!("Starting MetMac...");
-    if let Err(e) = listen({
-        let buffer_rc_clone = buffer_rc.clone();
-        move |event| {
-            callback(event, buffer_rc_clone.clone());
+    tokio::task::spawn_blocking(move || {
+        if let Err(e) = listen(move |event| {
+            let buffer_arc_clone = buffer_arc.clone();
+            tokio::spawn(async move {
+                callback(event, buffer_arc_clone).await;
+            });
+        }) {
+            info!("Error listening to events: {:?}", e);
         }
-    }) {
-        return Err(Error::msg(format!("{:?}", e)));
-    }
+    });
 
+    tokio::signal::ctrl_c().await?;
     Ok(())
 }
 
-fn callback(event: Event, buffer_rc: Rc<RefCell<KeyEventBuffer>>) {
-    let mut buffer = buffer_rc.borrow_mut();
+async fn callback(event: Event, buffer_arc: Arc<Mutex<KeyEventBuffer>>) {
     if let Some(key_event) = handle_keyboard_event(&event) {
-        match buffer.push(key_event) {
-            Ok(_) => (),
-            Err(e) => {
-                info!("Error pushing event to buffer: {:?}", e);
-            }
+        let mut buffer = buffer_arc.lock().await;
+        if let Err(e) = buffer.push(key_event).await {
+            info!("Error pushing event to buffer: {:?}", e);
         }
     }
 }
