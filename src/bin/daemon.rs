@@ -6,6 +6,7 @@ use env_logger::init;
 
 use log::info;
 use rdev::{listen, Event};
+use std::process::exit;
 use std::sync::Arc;
 use std::{path::PathBuf, time::Duration};
 use tokio::sync::Mutex;
@@ -27,7 +28,7 @@ async fn main() -> Result<()> {
     let buffer_arc = Arc::new(Mutex::new(buffer));
 
     info!("Starting MetMac...");
-    tokio::task::spawn_blocking(move || {
+    let listener_handle = tokio::task::spawn_blocking(move || {
         if let Err(e) = listen(move |event| {
             let buffer_arc_clone = buffer_arc.clone();
             tokio::spawn(async move {
@@ -38,7 +39,17 @@ async fn main() -> Result<()> {
         }
     });
 
-    tokio::signal::ctrl_c().await?;
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            info!("Received Ctrl-C, shutting down");
+            exit(0);
+        }
+        _ = listener_handle => {
+            info!("Listener task completed");
+        }
+    }
+
+    info!("Exiting");
     Ok(())
 }
 

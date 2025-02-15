@@ -9,6 +9,7 @@ use axum::{
     routing::get,
     serve, Router,
 };
+use env_logger::init;
 use metmac::storage::connection::Database;
 use serde_json::json;
 
@@ -35,13 +36,19 @@ impl From<anyhow::Error> for AppError {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    init(); // Init env logger
+
     // TODO: Make configurable path
     let db = Database::new(PathBuf::from("~/.metmac/data.db")).await?;
     db.run_migrations().await?;
 
     let app = Router::new()
         .route("/", get(serve_dashboard))
-        .route("/api/stats", get(get_stats).with_state(db));
+        .route("/api/stats", get(get_stats).with_state(db.clone()))
+        .route(
+            "/api/keyboard-stats",
+            get(get_keyboard_stats).with_state(db),
+        );
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3004").await?;
     serve(listener, app).await?;
@@ -55,6 +62,13 @@ async fn serve_dashboard() -> Html<&'static str> {
 
 async fn get_stats(State(db): State<Database>) -> impl IntoResponse {
     match db.get_stats().await {
+        Ok(stats) => Json(stats).into_response(),
+        Err(err) => AppError::from(err).into_response(),
+    }
+}
+
+async fn get_keyboard_stats(State(db): State<Database>) -> impl IntoResponse {
+    match db.get_keyboard_stats().await {
         Ok(stats) => Json(stats).into_response(),
         Err(err) => AppError::from(err).into_response(),
     }

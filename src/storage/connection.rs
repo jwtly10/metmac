@@ -3,7 +3,7 @@ use directories::BaseDirs;
 use log::{debug, info};
 
 use crate::models::events::KeyEvent;
-use crate::models::stats::DashboardStats;
+use crate::models::stats::{DashboardStats, KeyCount};
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
 use std::fs;
@@ -47,7 +47,10 @@ impl Database {
     pub async fn run_migrations(&self) -> Result<()> {
         info!("Running database migrations");
 
-        sqlx::migrate!("./migrations").run(&self.pool).await?;
+        if let Err(e) = sqlx::migrate!("./migrations").run(&self.pool).await {
+            eprintln!("Error running migrations: {}", e);
+            return Err(e.into()); // Propagate the error
+        }
 
         info!("Database migrations completed successfully!");
         Ok(())
@@ -99,19 +102,83 @@ impl Database {
     pub async fn get_stats(&self) -> Result<DashboardStats> {
         debug!("Getting dashboard stats");
 
-        let total = sqlx::query!(
+        let mut tx = self.pool.begin().await?;
+
+        let total_today = sqlx::query!(
             r#"
             SELECT COUNT(*) as count
-            FROM events
+            FROM today_events
             "#
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?
         .count;
 
+        let active_period = sqlx::query!(
+            r#"
+            SELECT
+                MIN(event_timestamp) as first_event,
+                MAX(event_timestamp) as last_event
+            FROM today_events
+    "#
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let first_ts = active_period.first_event.unwrap_or(0);
+        let last_ts = active_period.last_event.unwrap_or(0);
+
+        let top_keys = sqlx::query!(
+            r#"
+        SELECT key_name, COUNT(*) as count
+        FROM today_events
+        GROUP BY key_name
+        ORDER BY count DESC
+        LIMIT 10
+        "#
+        )
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .map(|row| (row.key_name, row.count as i64))
+        .collect::<Vec<_>>();
+
+        tx.commit().await?;
+
         Ok(DashboardStats {
-            total: total as i64,
+            total_today,
+            first_ts,
+            last_ts,
+            top_keys,
         })
+    }
+
+    /// Returns the count of each key pressed since beginning of time
+    pub async fn get_keyboard_stats(&self) -> Result<Vec<KeyCount>> {
+        debug!("Getting keyboard stats");
+
+        let mut tx = self.pool.begin().await?;
+
+        let key_counts = sqlx::query!(
+            r#"
+            SELECT key_name, COUNT(*) as count
+            FROM events
+            GROUP BY key_name
+            ORDER BY count DESC
+            "#
+        )
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .map(|row| KeyCount {
+            key_name: row.key_name,
+            count: row.count as i64,
+        })
+        .collect::<Vec<_>>();
+
+        tx.commit().await?;
+
+        Ok(key_counts)
     }
 }
 
