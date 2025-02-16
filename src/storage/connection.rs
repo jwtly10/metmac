@@ -65,12 +65,11 @@ impl Database {
             debug!("Inserting event: {:?}", event);
             sqlx::query!(
                 r#"
-                INSERT INTO events (event_timestamp, key_name, window_title)
-                VALUES (?, ?, ?)
+                INSERT INTO events (event_timestamp, key_name)
+                VALUES (?, ?)
                 "#,
                 event.timestamp,
                 event.key_name,
-                event.window_title
             )
             .execute(&mut *tx)
             .await?;
@@ -88,8 +87,7 @@ impl Database {
             r#"
             SELECT
                 event_timestamp as "timestamp",
-                key_name,
-                window_title
+                key_name
             FROM events
             "#
         )
@@ -212,12 +210,10 @@ mod tests {
             KeyEvent {
                 timestamp: Utc::now().timestamp(),
                 key_name: "a".to_string(),
-                window_title: "test".to_string(),
             },
             KeyEvent {
                 timestamp: Utc::now().timestamp(),
                 key_name: "b".to_string(),
-                window_title: "test".to_string(),
             },
         ];
 

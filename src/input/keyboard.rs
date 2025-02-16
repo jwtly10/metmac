@@ -2,7 +2,7 @@ use chrono::Utc;
 use log::{debug, info, warn};
 use rdev::{Event, EventType, Key};
 
-use crate::{models::events::KeyEvent, system::windows};
+use crate::models::events::KeyEvent;
 
 pub fn handle_keyboard_event(event: &Event) -> Option<KeyEvent> {
     match &event.event_type {
@@ -10,22 +10,7 @@ pub fn handle_keyboard_event(event: &Event) -> Option<KeyEvent> {
             debug!("Raw Event: {:?}", event);
             let key_name = parse_name_from_event(event);
 
-            //let application_name: String = match windows::get_focused_window() {
-            //    Some(name) => name,
-            //    None => {
-            //        warn!("Could not get the focused window");
-            //        "unknown".to_string()
-            //    }
-            //};
-
-            //let key_event =
-            //    KeyEvent::new(key_name, application_name, Utc::now().timestamp_millis());
-
-            let key_event = KeyEvent::new(
-                key_name,
-                "unknown".to_string(),
-                Utc::now().timestamp_millis(),
-            );
+            let key_event = KeyEvent::new(key_name, Utc::now().timestamp_millis());
 
             info!("Key Event: {:?}", key_event);
             Some(key_event)

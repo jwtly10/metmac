@@ -90,7 +90,6 @@ mod tests {
                 .push(KeyEvent {
                     timestamp: Utc::now().timestamp(),
                     key_name: format!("key{}", i),
-                    window_title: format!("title{}", i),
                 })
                 .await?;
         }
@@ -123,7 +122,6 @@ mod tests {
                 .push(KeyEvent {
                     timestamp: Utc::now().timestamp(),
                     key_name: format!("key{}", i),
-                    window_title: format!("title{}", i),
                 })
                 .await?;
         }
@@ -132,11 +130,7 @@ mod tests {
         tokio::time::sleep(Duration::from_secs(flush_interval + 1)).await;
 
         buffer
-            .push(KeyEvent::new(
-                "key6".to_string(),
-                "title6".to_string(),
-                Utc::now().timestamp(),
-            ))
+            .push(KeyEvent::new("key6".to_string(), Utc::now().timestamp()))
             .await?;
 
         let events = buffer.db.get_events().await?;
